@@ -50,7 +50,7 @@ $ rosrun mono_cam_calib mono_cam_calib
 $ rosbag play [rosbag 파일명] // rosbag실행
 ```
 
-[Demo Video]([Paper Review Study](https://www.notion.so/Paper-Review-Study-a59fb867065248fbb20b4a5840a5f661))
+[Demo Video](https://www.notion.so/Paper-Review-Study-a59fb867065248fbb20b4a5840a5f661)
 
 ## Results
 result폴더에 저장 
