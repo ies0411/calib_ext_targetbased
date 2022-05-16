@@ -35,7 +35,7 @@ $ docker run --gpus all -it --ipc=host  --expose 22 --net=host --privileged -e D
 
 ## Parameter
 rosrun 이 아닌 launch 파일로 실행시길 경우 직접 파라미터 세팅
-![launch file](https://user-images.githubusercontent.com/44966311/168318213-5733af5c-1723-4fea-98d8-90f480533510.png)
+![launchfile](https://user-images.githubusercontent.com/44966311/168544455-4b78a416-0f66-44b5-bb10-503b9b8b13f9.png))
 ```
 $ roslaunch cam_lidar_calib cam_lidar_calib_basler_VLP
 ```
