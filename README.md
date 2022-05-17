@@ -16,20 +16,20 @@ Camera Extrinsic Parameter
 
 ### Dependancy
 
-1.1 ROS and Ubuntu
-Our code has been tested on Ubuntu 16.04 with ROS Kinetic and Ubuntu 18.04 with ROS Melodic.
+- 1.1 ROS and Ubuntu
+  Our code has been tested on Ubuntu 16.04 with ROS Kinetic and Ubuntu 18.04 with ROS Melodic.
 
-1.2 Ceres Solver
-Our code has been tested on ceres solver 1.14.x.
+- 1.2 Ceres Solver
+  Our code has been tested on ceres solver 1.14.x.
 
-1.3 OpenCV
-Our code has been tested on OpenCV 3.4.14.
+- 1.3 OpenCV
+  Our code has been tested on OpenCV 3.4.14.
 
-1.4 Eigen
-Our code has been tested on Eigen 3.3.7.
+- 1.4 Eigen
+  Our code has been tested on Eigen 3.3.7.
 
-1.5 PCL
-Our code has been tested on PCL 1.8.
+- 1.5 PCL
+  Our code has been tested on PCL 1.8.
 
 ## Install
 
