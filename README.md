@@ -16,13 +16,25 @@ Camera Extrinsic Parameter
 
 ### Dependancy
 
-- ROS melodic ver
-- Opencv 3.4 이상
-- c++17
+1.1 ROS and Ubuntu
+Our code has been tested on Ubuntu 16.04 with ROS Kinetic and Ubuntu 18.04 with ROS Melodic.
+
+1.2 Ceres Solver
+Our code has been tested on ceres solver 1.14.x.
+
+1.3 OpenCV
+Our code has been tested on OpenCV 3.4.14.
+
+1.4 Eigen
+Our code has been tested on Eigen 3.3.7.
+
+1.5 PCL
+Our code has been tested on PCL 1.8.
 
 ## Install
 
-- Docker 사용 : Nvidia docker Image 설치필요
+### 1. set-up
+Docker 사용 : Nvidia docker Image 설치필요
 
 ```
 $ sudo apt-get install x11-xserver-utils
@@ -32,7 +44,21 @@ $ docker pull authorsoo/px4:9.0
 $ docker run --gpus all -it --ipc=host  --expose 22 --net=host --privileged -e DISPLAY=unix$DISPLAY 
     -v /tmp/.X11-unix:/tmp/.X11-unix:rw -e NVIDIA_DRIVER_CAPABILITIES=all --name calib authorsoo/px4:9.0 bash
 ```
-
+### 2. launch Lidar-Lidar
+Step 1: base LiDAR pose optimization (the initial pose is stored in scene-x/original_pose)
+```
+roslaunch mlcc pose_refine.launch
+```
+Step 2: LiDAR extrinsic optimization (the initial extrinsic is stored in config/init_extrinsic)
+```
+roslaunch mlcc extrinsic_refine.launch
+```
+Step 3: pose and extrinsic joint optimization
+```
+roslaunch mlcc global_refine.launch
+```
+### 3 LiADR-Camera Extrinsic Calibration
+roslaunch mlcc calib_camera.launch
 ## Parameter
 rosrun 이 아닌 launch 파일로 실행시길 경우 직접 파라미터 세팅
 ![launchfile](https://user-images.githubusercontent.com/44966311/168544455-4b78a416-0f66-44b5-bb10-503b9b8b13f9.png))
