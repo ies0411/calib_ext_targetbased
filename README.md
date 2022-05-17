@@ -45,26 +45,28 @@ $ docker run --gpus all -it --ipc=host  --expose 22 --net=host --privileged -e D
     -v /tmp/.X11-unix:/tmp/.X11-unix:rw -e NVIDIA_DRIVER_CAPABILITIES=all --name calib authorsoo/px4:9.0 bash
 ```
 ### 2. launch Lidar-Lidar
-Step 1: base LiDAR pose optimization (the initial pose is stored in scene-x/original_pose)
+ - Step 1: base LiDAR pose optimization (the initial pose is stored in scene-x/original_pose)
 ```
 roslaunch mlcc pose_refine.launch
 ```
-Step 2: LiDAR extrinsic optimization (the initial extrinsic is stored in config/init_extrinsic)
+ - Step 2: LiDAR extrinsic optimization (the initial extrinsic is stored in config/init_extrinsic)
 ```
 roslaunch mlcc extrinsic_refine.launch
 ```
-Step 3: pose and extrinsic joint optimization
+ - Step 3: pose and extrinsic joint optimization
 ```
 roslaunch mlcc global_refine.launch
 ```
 ### 3 LiADR-Camera Extrinsic Calibration
+```
 roslaunch mlcc calib_camera.launch
+```
 ## Parameter
-rosrun 이 아닌 launch 파일로 실행시길 경우 직접 파라미터 세팅
+파라미터 세팅
+
+** todo
 ![launchfile](https://user-images.githubusercontent.com/44966311/168544455-4b78a416-0f66-44b5-bb10-503b9b8b13f9.png))
-```
-$ roslaunch cam_lidar_calib cam_lidar_calib_basler_VLP
-```
+
 ## Demo
 1. Dataset 이용
 [Dataset](https://drive.google.com/a/tamu.edu/file/d/19Ke-oOhqkPKJBACmrfba4R5-w71_wrvT/view?usp=sharing)
