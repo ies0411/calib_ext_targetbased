@@ -1,9 +1,19 @@
-//
-// Created by usl on 4/6/19.
-//
+/**
+ * @file cam_lidar_calib_node.cpp
+ * @author eunsoo
+ * @brief customizing cam_lidar_calib package
+ * @version 0.1
+ * @date 2022-05-19
+ *
+ * @copyright Copyright (c) 2022
+ *
+ */
 
 #include <calibration_error_term.h>
 #include <cv_bridge/cv_bridge.h>
+#include <jsoncpp/json/config.h>
+#include <jsoncpp/json/json.h>
+#include <jsoncpp/json/writer.h>
 #include <message_filters/subscriber.h>
 #include <message_filters/sync_policies/approximate_time.h>
 #include <message_filters/synchronizer.h>
@@ -73,7 +83,7 @@ class camLidarCalib {
     std::vector<std::vector<Eigen::Vector3d> > all_lidar_points;
     std::vector<Eigen::Vector3d> all_normals;
 
-    std::string result_str, result_rpy;
+    std::string result_str, result_rpy, result_json_;
 
     std::string camera_in_topic;
     std::string lidar_in_topic;
@@ -103,6 +113,7 @@ class camLidarCalib {
     void callback(const sensor_msgs::PointCloud2ConstPtr &cloud_msg,
                   const sensor_msgs::ImageConstPtr &image_msg);
     void getParamFunc(ros::NodeHandle &priv_nh);
+    void writeResultToJson(Eigen::MatrixXd &C_T_L, Eigen::Matrix3d &Rotn);
 
    public:
     camLidarCalib(ros::NodeHandle &priv_nh) {
@@ -153,10 +164,11 @@ void camLidarCalib::getParamFunc(ros::NodeHandle &priv_nh) {
     priv_nh.param<int>("checkerboard_cols", checkerboard_cols, 6);
 
     priv_nh.param<int>("min_points_on_plane", min_points_on_plane, 250);
-    priv_nh.param<int>("num_views", num_views, 5);
+    priv_nh.param<int>("num_views", num_views, 3);
     priv_nh.param<std::string>("initializations_file", initializations_file, std::string("/home/catkin_ws/src/cam_lidar_calib/debug_data/init.txt"));
 
     priv_nh.param<int>("no_of_initializations", no_of_initializations, 1);
+    priv_nh.param<std::string>("json_result_file", result_json_, std::string("/home/catkin_ws/src/cam_lidar_calib/debug_data/result_json.json"));
 
     priv_nh.param<std::string>("result_file", result_str, std::string("/home/catkin_ws/src/cam_lidar_calib/debug_data/CTL.txt"));
     priv_nh.param<std::string>("result_rpy_file", result_rpy, std::string("/home/catkin_ws/src/cam_lidar_calib/debug_data/rpy.txt"));
@@ -331,7 +343,7 @@ void camLidarCalib::imageHandler(const sensor_msgs::ImageConstPtr &image_msg) {
             r3 = c_R_w.block<3, 1>(0, 2);
             Nc = (r3.dot(c_t_w)) * r3;
         }
-        cv::resize(image_in, image_resized, cv::Size(), 0.1, 0.1);
+        cv::resize(image_in, image_resized, cv::Size(), 0.25, 0.25);
         cv::imshow("view", image_resized);
         cv::waitKey(10);
     } catch (cv_bridge::Exception &e) {
@@ -461,6 +473,9 @@ void camLidarCalib::runSolver() {
                                 << C_T_L.block(0, 3, 3, 1);
                     results_rpy.close();
 
+                    // save file as json
+                    writeResultToJson(C_T_L, Rotn);
+
                     ROS_INFO_STREAM("No of initialization: " << counter);
                 }
                 init_file.close();
@@ -477,6 +492,30 @@ void camLidarCalib::runSolver() {
                                                                  << "No of LiDAR pts: " << lidar_points.size() << " (Check if this is less than threshold) ");
         }
     }
+}
+
+void camLidarCalib::writeResultToJson(Eigen::MatrixXd &C_T_L, Eigen::Matrix3d &Rotn) {
+    Json::Value extrin_homogeneous;
+    for (int i = 0; i < C_T_L.rows(); i++) {
+        for (int j = 0; j < C_T_L.cols(); j++) {
+            extrin_homogeneous["Homogeneous"][i].append(C_T_L(i, j));
+        }
+    }
+    Eigen::Vector3d angle = Rotn.eulerAngles(0, 1, 2) * 180 / M_PI;
+    for (int i = 0; i < 3; i++) {
+        std::cout << angle[i] << std::endl;
+        extrin_homogeneous["rpy"].append(angle[i]);
+    }
+    Eigen::Vector3d translation = C_T_L.block(0, 3, 3, 1);
+    for (int i = 0; i < 3; i++) {
+        extrin_homogeneous["translation"].append(translation[i]);
+    }
+
+    Json::StyledWriter writer;
+    auto str = writer.write(extrin_homogeneous);
+    std::ofstream result_json_file(result_json_, std::ofstream::out | std::ofstream::trunc);
+    result_json_file << str;
+    result_json_file.close();
 }
 
 void camLidarCalib::callback(const sensor_msgs::PointCloud2ConstPtr &cloud_msg,

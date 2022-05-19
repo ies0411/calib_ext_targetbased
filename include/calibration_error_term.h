@@ -1,6 +1,3 @@
-//
-// Created by usl on 4/9/19.
-//
 
 #ifndef CAM_LIDAR_CALIB_CALIBRATION_ERROR_TERM_H
 #define CAM_LIDAR_CALIB_CALIBRATION_ERROR_TERM_H

@@ -9,8 +9,10 @@
   	<param name = "checkerboard_rows" type = "int" value = "9" />
   	<param name = "checkerboard_cols" type = "int" value = "6" />
 
-  	<!-- <param name = "result_file" type="string" value="$(find calibration)/debug_data/draw/C_T_L_basler_VLP_GP.txt"/>
-  	<param name = "result_rpy_file" type="string" value="$(find calibration)/debug_data/draw/rpy_txyz_basler.txt"/> -->
+  	<param name = "result_file" type="string" value="$(find calibration)/debug_data/CTL.txt"/>
+  	<param name = "result_rpy_file" type="string" value="$(find calibration)/debug_data/rpy.txt"/>
+  	<param name = "json_result_file" type="string" value="$(find calibration)/debug_data/result_json.json"/>
+
 
   	<param name = "min_points_on_plane" type="int" value="250"/>
   	<param name = "num_views" type="int" value="3"/>
@@ -26,6 +28,6 @@
 		<param name="z_max" value="2"/>
 		<param name="ransac_threshold" value="0.01"/>
 
-  	<param name = "cam_config_file_path" type="string" value="$(find cam_lidar_calib)/config/basler.yaml" />
+  	<param name = "cam_config_file_path" type="string" value="$(find cam_lidar_calib)/config/basler_config.yaml" />
   </node>
 </launch>
