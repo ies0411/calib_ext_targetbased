@@ -17,6 +17,8 @@
 #include <message_filters/subscriber.h>
 #include <message_filters/sync_policies/approximate_time.h>
 #include <message_filters/synchronizer.h>
+#include <open3d/Open3D.h>
+#include <open3d/io/PointCloudIO.h>
 #include <pcl/common/eigen.h>
 #include <pcl/common/transforms.h>
 #include <pcl/filters/passthrough.h>
@@ -46,6 +48,7 @@
 #include "ceres/covariance.h"
 #include "ceres/rotation.h"
 #include "glog/logging.h"
+#include "open3d_ros/open3d_ros.h"
 #include "ros/ros.h"
 #include "sensor_msgs/CameraInfo.h"
 #include "sensor_msgs/Image.h"
@@ -155,6 +158,7 @@ class camLidarCalib {
 };
 
 camLidarCalib::~camLidarCalib() {
+    ROS_INFO("terminate");
 }
 
 void camLidarCalib::getParamFunc(ros::NodeHandle &priv_nh) {
@@ -163,8 +167,8 @@ void camLidarCalib::getParamFunc(ros::NodeHandle &priv_nh) {
     priv_nh.param<int>("checkerboard_rows", checkerboard_rows, 9);
     priv_nh.param<int>("checkerboard_cols", checkerboard_cols, 6);
 
-    priv_nh.param<int>("min_points_on_plane", min_points_on_plane, 250);
-    priv_nh.param<int>("num_views", num_views, 3);
+    priv_nh.param<int>("min_points_on_plane", min_points_on_plane, 450);
+    priv_nh.param<int>("num_views", num_views, 8);
     priv_nh.param<std::string>("initializations_file", initializations_file, std::string("/home/catkin_ws/src/cam_lidar_calib/debug_data/init.txt"));
 
     priv_nh.param<int>("no_of_initializations", no_of_initializations, 1);
@@ -249,6 +253,12 @@ void camLidarCalib::addGaussianNoise(Eigen::Matrix4d &transformation) {
 }
 
 void camLidarCalib::cloudHandler(const sensor_msgs::PointCloud2ConstPtr &cloud_msg) {
+    // open3d::geometry::PointCloud pcd;
+    auto pcd = std::make_shared<open3d::geometry::PointCloud>();
+
+    open3d_ros::rosToOpen3d(cloud_msg, *pcd);
+    pcd->SegmentPlane();
+
     pcl::PointCloud<pcl::PointXYZ>::Ptr in_cloud(new pcl::PointCloud<pcl::PointXYZ>);
     // ros pointclout type -> pcl type
     pcl::fromROSMsg(*cloud_msg, *in_cloud);
@@ -354,7 +364,7 @@ void camLidarCalib::imageHandler(const sensor_msgs::ImageConstPtr &image_msg) {
 
 void camLidarCalib::runSolver() {
     if (lidar_points.size() > min_points_on_plane && boardDetectedInCam) {
-        if (r3.dot(r3_old) < 0.90) {  // compare roatation with pre-pcl data, need a lot of difference.
+        if (r3.dot(r3_old) < 0.95) {  // compare roatation with pre-pcl data, need a lot of difference.
             r3_old = r3;
             all_normals.push_back(Nc);
             all_lidar_points.push_back(lidar_points);
@@ -368,7 +378,12 @@ void camLidarCalib::runSolver() {
 
                     /// Step 1: Initialization
                     Eigen::Matrix4d transformation_matrix = Eigen::Matrix4d::Identity();
-                    addGaussianNoise(transformation_matrix);
+                    // addGaussianNoise(transformation_matrix);
+                    // transformation_matrix << 5.96046e-08, -0.999391, 0.0348994, -1.0,
+                    //     0, -0.0348994, -0.999391, -1.0,
+                    //     1, 0, 5.96046e-08, -1.0,
+                    //     0.0, 0.0, 0.0, 1.0;
+
                     Eigen::Matrix3d Rotn = transformation_matrix.block(0, 0, 3, 3);
                     Eigen::Vector3d axis_angle;
                     ceres::RotationMatrixToAngleAxis(Rotn.data(), axis_angle.data());
@@ -385,9 +400,11 @@ void camLidarCalib::runSolver() {
                     R_t(3) = Translation(0);
                     R_t(4) = Translation(1);
                     R_t(5) = Translation(2);
+
                     /// Step2: Defining the Loss function (Can be NULL)
                     //                    ceres::LossFunction *loss_function = new ceres::CauchyLoss(1.0);
                     //                    ceres::LossFunction *loss_function = new ceres::HuberLoss(0.1);
+
                     ceres::LossFunction *loss_function = NULL;
 
                     /// Step 3: Form the Optimization Problem
