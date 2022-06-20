@@ -97,7 +97,7 @@ class camLidarCalib {
     Eigen::Vector3d r3;
     Eigen::Vector3d r3_old;
     Eigen::Vector3d Nc;
-
+    std::shared_ptr<o3d::geometry::PointCloud> plane_cloud;
     std::vector<Eigen::Vector3d> lidar_points;
     std::vector<std::vector<Eigen::Vector3d> > all_lidar_points;
     std::vector<Eigen::Vector3d> all_normals;
@@ -106,7 +106,7 @@ class camLidarCalib {
 
     std::string camera_in_topic;
     std::string lidar_in_topic;
-
+    std::vector<o3d::geometry::PointCloud> all_points;
     int num_views;
 
     std::string cam_config_file_path;
@@ -126,7 +126,9 @@ class camLidarCalib {
     void callback(const sensor_msgs::PointCloud2ConstPtr &cloud_msg, const sensor_msgs::ImageConstPtr &image_msg);
     void getParamFunc(ros::NodeHandle &priv_nh);
     void writeResultToJson(Eigen::MatrixXd &C_T_L, Eigen::Matrix3d &Rotn);
-    void open3DCallback(const sensor_msgs::PointCloud2ConstPtr &cloud_data);
+    // void open3DCallback(const sensor_msgs::PointCloud2ConstPtr &cloud_msg);
+    bool handleLidarWithOpen3D(const sensor_msgs::PointCloud2ConstPtr &cloud_msg);
+    bool solveWithOpen3D();
 
    public:
     camLidarCalib(ros::NodeHandle &priv_nh) {
@@ -142,7 +144,7 @@ class camLidarCalib {
 
         sync = new message_filters::Synchronizer<SyncPolicy>(SyncPolicy(100), *cloud_sub, *image_sub);
         sync->registerCallback(boost::bind(&camLidarCalib::callback, this, _1, _2));
-        open3d_sub = nh.subscribe(lidar_in_topic, 10, &camLidarCalib::open3DCallback, this);
+        // open3d_sub = nh.subscribe(lidar_in_topic, 10, &camLidarCalib::open3DCallback, this);
         cloud_pub = nh.advertise<sensor_msgs::PointCloud2>("points_out", 1);
         projection_matrix = cv::Mat::zeros(3, 3, CV_64F);
         distCoeff = cv::Mat::zeros(5, 1, CV_64F);
@@ -168,13 +170,13 @@ camLidarCalib::~camLidarCalib() {
     ROS_INFO("terminate");
 }
 
-void camLidarCalib::open3DCallback(const sensor_msgs::PointCloud2ConstPtr &cloud_data) {
-    std::vector<o3d::geometry::PointCloud> all_points;  // = std::make_shared<open3d::geometry::PointCloud>();
+bool camLidarCalib::handleLidarWithOpen3D(const sensor_msgs::PointCloud2ConstPtr &cloud_msg) {
+    // = std::make_shared<open3d::geometry::PointCloud>();
     std::shared_ptr<o3d::geometry::PointCloud> pcd;
 
     pcd = std::make_shared<open3d::geometry::PointCloud>();
 
-    open3d_ros::rosToOpen3d(cloud_data, *pcd);
+    open3d_ros::rosToOpen3d(cloud_msg, *pcd);
 
     std::shared_ptr<o3d::geometry::PointCloud> filtered_pcd = std::make_shared<open3d::geometry::PointCloud>();
     filtered_pcd->points_.clear();
@@ -187,19 +189,25 @@ void camLidarCalib::open3DCallback(const sensor_msgs::PointCloud2ConstPtr &cloud
         }
     }
 
-    auto [plane_model, plane_points] = filtered_pcd->SegmentPlane();  // TODO: ransac param 설정
-    auto plane_cloud = filtered_pcd->SelectByIndex(plane_points);
+    auto [plane_model, plane_points] = filtered_pcd->SegmentPlane(0.005, 5, 100);  // TODO: ransac param 설정
+
+    // plane_cloud->points_.clear();
+    plane_cloud = filtered_pcd->SelectByIndex(plane_points);
 
     sensor_msgs::PointCloud2 out_cloud;
     open3d_ros::open3dToRos(*plane_cloud, out_cloud, "o3d_frame");
     cloud_pub.publish(out_cloud);
 
-    if (plane_cloud->points_.size() > min_points_on_plane) return;
-    if (r3.dot(r3_old) > 0.95) return;
+    if (plane_cloud->points_.size() < min_points_on_plane) return false;
+    return true;
+}
+bool camLidarCalib::solveWithOpen3D() {
+    if (r3.dot(r3_old) > 0.95) return false;
     r3_old = r3;
     all_normals.push_back(Nc);
     all_points.push_back(plane_cloud->points_);
-    if (all_normals.size() < num_views++) return;
+    ROS_INFO("num of view : %d", all_normals.size());
+    if (all_normals.size() < num_views) return false;
     ROS_INFO_STREAM("Starting optimization...");
     Eigen::Matrix3d rotation_matrix = Eigen::Matrix3d::Identity();
     Eigen::Vector3d translation_vector = Eigen::Vector3d::Zero();
@@ -228,100 +236,27 @@ void camLidarCalib::open3DCallback(const sensor_msgs::PointCloud2ConstPtr &cloud
     }
     ceres::Solver::Options options;
     options.max_num_iterations = 300;
-    options.linear_solver_ordering = ceres::SPARSE_NORMAL_CHOLESKY;
+    options.linear_solver_type = ceres::SPARSE_NORMAL_CHOLESKY;
     options.minimizer_progress_to_stdout = true;
     ceres::Solver::Summary summary;
     ceres::Solve(options, &problem, &summary);
-
-    //                     /// Printing and Storing C_T_L in a file
-    //                     ceres::AngleAxisToRotationMatrix(R_t.data(), Rotn.data());
-    //                     Eigen::MatrixXd C_T_L(3, 4);
-    //                     C_T_L.block(0, 0, 3, 3) = Rotn;
-    //                     C_T_L.block(0, 3, 3, 1) = Eigen::Vector3d(R_t[3], R_t[4], R_t[5]);
-    //                     std::cout << "RPY = " << Rotn.eulerAngles(0, 1, 2) * 180 / M_PI << std::endl;
-    //                     std::cout << "t = " << C_T_L.block(0, 3, 3, 1) << std::endl;
-
-    //                     init_file << rpy_init(0) << "," << rpy_init(1) << "," << rpy_init(2) << ","
-    //                               << tran_init(0) << "," << tran_init(1) << "," << tran_init(2) << "\n";
-    //                     init_file << Rotn.eulerAngles(0, 1, 2)(0) * 180 / M_PI << "," << Rotn.eulerAngles(0, 1, 2)(1) * 180 / M_PI << "," << Rotn.eulerAngles(0, 1, 2)(2) * 180 / M_PI << ","
-    //                               << R_t[3] << "," << R_t[4] << "," << R_t[5] << "\n";
-
-    //                     /// Step 5: Covariance Estimation
-    //                     ceres::Covariance::Options options_cov;
-    //                     ceres::Covariance covariance(options_cov);
-    //                     std::vector<std::pair<const double *, const double *> > covariance_blocks;
-    //                     covariance_blocks.push_back(std::make_pair(R_t.data(), R_t.data()));
-    //                     CHECK(covariance.Compute(covariance_blocks, &problem));
-    //                     double covariance_xx[6 * 6];
-    //                     covariance.GetCovarianceBlock(R_t.data(), R_t.data(), covariance_xx);
-
-    //                     Eigen::MatrixXd cov_mat_RotTrans(6, 6);
-    //                     cv::Mat cov_mat_cv = cv::Mat(6, 6, CV_64F, &covariance_xx);
-    //                     cv::cv2eigen(cov_mat_cv, cov_mat_RotTrans);
-
-    //                     Eigen::MatrixXd cov_mat_TransRot(6, 6);
-    //                     cov_mat_TransRot.block(0, 0, 3, 3) = cov_mat_RotTrans.block(3, 3, 3, 3);
-    //                     cov_mat_TransRot.block(3, 3, 3, 3) = cov_mat_RotTrans.block(0, 0, 3, 3);
-    //                     cov_mat_TransRot.block(0, 3, 3, 3) = cov_mat_RotTrans.block(3, 0, 3, 3);
-    //                     cov_mat_TransRot.block(3, 0, 3, 3) = cov_mat_RotTrans.block(0, 3, 3, 3);
-
-    //                     double sigma_xx = sqrt(cov_mat_TransRot(0, 0));
-    //                     double sigma_yy = sqrt(cov_mat_TransRot(1, 1));
-    //                     double sigma_zz = sqrt(cov_mat_TransRot(2, 2));
-
-    //                     double sigma_rot_xx = sqrt(cov_mat_TransRot(3, 3));
-    //                     double sigma_rot_yy = sqrt(cov_mat_TransRot(4, 4));
-    //                     double sigma_rot_zz = sqrt(cov_mat_TransRot(5, 5));
-
-    //                     std::cout << "sigma_xx = " << sigma_xx << "\t"
-    //                               << "sigma_yy = " << sigma_yy << "\t"
-    //                               << "sigma_zz = " << sigma_zz << std::endl;
-
-    //                     std::cout << "sigma_rot_xx = " << sigma_rot_xx * 180 / M_PI << "\t"
-    //                               << "sigma_rot_yy = " << sigma_rot_yy * 180 / M_PI << "\t"
-    //                               << "sigma_rot_zz = " << sigma_rot_zz * 180 / M_PI << std::endl;
-
-    //                     std::ofstream results;
-    //                     results.open(result_str);
-    //                     results << C_T_L;
-    //                     results.close();
-
-    //                     std::ofstream results_rpy;
-    //                     results_rpy.open(result_rpy);
-    //                     results_rpy << Rotn.eulerAngles(0, 1, 2) * 180 / M_PI << "\n"
-    //                                 << C_T_L.block(0, 3, 3, 1);
-    //                     results_rpy.close();
-
-    //                     // save file as json
-    //                     writeResultToJson(C_T_L, Rotn);
-
-    //                     ROS_INFO_STREAM("No of initialization: " << counter);
-    //                 }
-    //                 init_file.close();
-    //                 ros::shutdown();
-    //             }
-    //         } else {
-    //             ROS_WARN_STREAM("Not enough Rotation, view not recorded");
-    //         }
-    //     } else {
-    //         if (!boardDetectedInCam)
-    //             ROS_WARN_STREAM("Checker-board not detected in Image.");
-    //         else {
-    //             ROS_WARN_STREAM("Checker Board Detected in Image?: " << boardDetectedInCam << "\t"
-    //                                                                  << "No of LiDAR pts: " << lidar_points.size() << " (Check if this is less than threshold) ");
-    //         }
-    //     }
-
-    // auto rest_cloud = pcd->SelectByIndex(pcd->points_);
-    // rest_cloud->PaintUniformColor({0, 0, 1});
-
-    // CustomDrawGeometries({plane_cloud}, &lookat, &up, &front, &zoom);
-
-    // open3d_ros::rosToOpen3d(cloud_msg, *pcd);
-    // pcd->SegmentPlane();
-    // Do something with the Open3D pointcloud
+    axis_angle(0) = opt_param(0);
+    axis_angle(1) = opt_param(1);
+    axis_angle(2) = opt_param(2);
+    ceres::AngleAxisToRotationMatrix(axis_angle.data(), rotation_matrix.data());
+    translation_vector(0) = opt_param(3);
+    translation_vector(1) = opt_param(4);
+    translation_vector(2) = opt_param(5);
+    std::ofstream results;
+    results.open(result_str);
+    results << "rotation\n"
+            << rotation_matrix
+            << "\ntranslation\n"
+            << translation_vector;
+    results.close();
+    ROS_INFO_STREAM("complete..");
+    ros::shutdown();
 }
-
 void camLidarCalib::getParamFunc(ros::NodeHandle &priv_nh) {
     priv_nh.param<double>("dx", dx, 0.075);
     priv_nh.param<double>("dy", dy, 0.075);
@@ -435,7 +370,7 @@ bool camLidarCalib::imageHandler(const sensor_msgs::ImageConstPtr &image_msg) {
     try {
         // ros type -> cv type
         image_in = cv_bridge::toCvShare(image_msg, "bgr8")->image;
-        if (!cv::findChessboardCorners(image_in, cv::Size(checkerboard_cols, checkerboard_rows), image_points, cv::CALIB_CB_ADAPTIVE_THRESH + cv::CALIB_CB_NORMALIZE_IMAGE)) {
+        if (-1 == cv::findChessboardCorners(image_in, cv::Size(checkerboard_cols, checkerboard_rows), image_points, cv::CALIB_CB_ADAPTIVE_THRESH + cv::CALIB_CB_NORMALIZE_IMAGE)) {
             return false;
         }
 
@@ -458,6 +393,7 @@ bool camLidarCalib::imageHandler(const sensor_msgs::ImageConstPtr &image_msg) {
         cv::resize(image_in, image_resized, cv::Size(), 0.25, 0.25);
         cv::imshow("view", image_resized);
         cv::waitKey(10);
+        return true;
     } catch (cv_bridge::Exception &e) {
         ROS_ERROR("Could not convert from '%s' to 'bgr8'.", image_msg->encoding.c_str());
         return false;
@@ -631,11 +567,14 @@ void camLidarCalib::writeResultToJson(Eigen::MatrixXd &C_T_L, Eigen::Matrix3d &R
 
 void camLidarCalib::callback(const sensor_msgs::PointCloud2ConstPtr &cloud_msg,
                              const sensor_msgs::ImageConstPtr &image_msg) {
-    if (!imageHandler(image_msg)) {
-        return;
-    }
-    cloudHandler(cloud_msg);
-    runSolver();
+    if (!imageHandler(image_msg)) return;
+
+    // cloudHandler(cloud_msg);
+
+    if (!handleLidarWithOpen3D(cloud_msg)) return;
+    // runSolver();
+
+    solveWithOpen3D();
 }
 
 int main(int argc, char **argv) {
