@@ -49,17 +49,18 @@
 #include "ceres/rotation.h"
 #include "glog/logging.h"
 #include "open3d_ros/open3d_ros.h"
+#include "open3d_visualizer.h"
 #include "ros/ros.h"
 #include "sensor_msgs/CameraInfo.h"
 #include "sensor_msgs/Image.h"
 #include "sensor_msgs/PointCloud2.h"
-
 typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::PointCloud2, sensor_msgs::Image> SyncPolicy;
 
 class camLidarCalib {
    private:
     ros::NodeHandle nh;
     ros::Publisher cloud_pub;
+    ros::Subscriber open3d_sub;
     message_filters::Subscriber<sensor_msgs::PointCloud2> *cloud_sub;
     message_filters::Subscriber<sensor_msgs::Image> *image_sub;
     message_filters::Synchronizer<SyncPolicy> *sync;
@@ -103,20 +104,14 @@ class camLidarCalib {
     std::string initializations_file;
     std::ofstream init_file;
 
-    void readCameraParams(std::string cam_config_file_path,
-                          int &image_height,
-                          int &image_width,
-                          cv::Mat &D,
-                          cv::Mat &K);
-
-    void addGaussianNoise(Eigen::Matrix4d &transformation);
+    void readCameraParams(std::string cam_config_file_path, int &image_height, int &image_width, cv::Mat &D, cv::Mat &K);
     void cloudHandler(const sensor_msgs::PointCloud2ConstPtr &cloud_msg);
     void imageHandler(const sensor_msgs::ImageConstPtr &image_msg);
     void runSolver();
-    void callback(const sensor_msgs::PointCloud2ConstPtr &cloud_msg,
-                  const sensor_msgs::ImageConstPtr &image_msg);
+    void callback(const sensor_msgs::PointCloud2ConstPtr &cloud_msg, const sensor_msgs::ImageConstPtr &image_msg);
     void getParamFunc(ros::NodeHandle &priv_nh);
     void writeResultToJson(Eigen::MatrixXd &C_T_L, Eigen::Matrix3d &Rotn);
+    void open3DCallback(const sensor_msgs::PointCloud2ConstPtr &cloud_data);
 
    public:
     camLidarCalib(ros::NodeHandle &priv_nh) {
@@ -130,8 +125,9 @@ class camLidarCalib {
         cloud_sub = new message_filters::Subscriber<sensor_msgs::PointCloud2>(nh, lidar_in_topic, 10);
         image_sub = new message_filters::Subscriber<sensor_msgs::Image>(nh, camera_in_topic, 10);
         sync = new message_filters::Synchronizer<SyncPolicy>(SyncPolicy(100), *cloud_sub, *image_sub);
-        sync->registerCallback(boost::bind(&camLidarCalib::callback, this, _1, _2));
+        // sync->registerCallback(boost::bind(&camLidarCalib::callback, this, _1, _2));
 
+        open3d_sub = nh.subscribe(lidar_in_topic, 10, &camLidarCalib::open3DCallback, this);
         cloud_pub = nh.advertise<sensor_msgs::PointCloud2>("points_out", 1);
         projection_matrix = cv::Mat::zeros(3, 3, CV_64F);
         distCoeff = cv::Mat::zeros(5, 1, CV_64F);
@@ -146,11 +142,7 @@ class camLidarCalib {
             for (int j = 0; j < checkerboard_cols; j++)
                 object_points.emplace_back(cv::Point3f(i * dx, j * dy, 0.0));
 
-        readCameraParams(cam_config_file_path,
-                         image_height,
-                         image_width,
-                         distCoeff,
-                         projection_matrix);
+        readCameraParams(cam_config_file_path, image_height, image_width, distCoeff, projection_matrix);
 
         ROS_INFO("init finish");
     }
@@ -161,14 +153,51 @@ camLidarCalib::~camLidarCalib() {
     ROS_INFO("terminate");
 }
 
+void camLidarCalib::open3DCallback(const sensor_msgs::PointCloud2ConstPtr &cloud_data) {
+    // open3d::geometry::PointCloud pcd;
+    Eigen::Vector3d lookat{2.53, 1.12, -5.31};
+    Eigen::Vector3d up{0.49, 0.05, 0.87};
+    Eigen::Vector3d front{-0.86, -0.13, 0.49};
+    double zoom{0.1};
+    std::shared_ptr<o3d::geometry::PointCloud> pcd;
+
+    pcd = std::make_shared<open3d::geometry::PointCloud>();
+
+    // std::shared_ptr<o3d::utility::Vector3dVector(x, y, z)> pcd_points;
+    open3d_ros::rosToOpen3d(cloud_data, *pcd);
+    // ROS_INFO("%d", pcd->points_.size());
+    // pointcloud.points_.size()
+    // pointcloud.points_.push_back(Eigen::Vector3d(0.0, 0.0, 0.0));
+    // CustomDrawGeometries({pcd}, &lookat, &up, &front, &zoom);
+    // std::cout << pcd << std::endl;
+    std::shared_ptr<o3d::geometry::PointCloud> filtered_pcd = std::make_shared<open3d::geometry::PointCloud>();
+
+    pcd->points_.x;
+
+    auto [plane_model, plane_points] = pcd->SegmentPlane(0.01, 3, 100);
+
+    auto plane_cloud = pcd->SelectByIndex(plane_points);
+    plane_cloud->PaintUniformColor({1, 0, 0});
+
+    auto rest_cloud = pcd->SelectByIndex(plane_points, true);
+    rest_cloud->PaintUniformColor({0, 0, 1});
+
+    CustomDrawGeometries(
+        {plane_cloud, rest_cloud}, &lookat, &up, &front, &zoom);
+
+    // open3d_ros::rosToOpen3d(cloud_msg, *pcd);
+    pcd->SegmentPlane();
+    // Do something with the Open3D pointcloud
+}
+
 void camLidarCalib::getParamFunc(ros::NodeHandle &priv_nh) {
-    priv_nh.param<double>("dx", dx, 0.0615);
-    priv_nh.param<double>("dy", dy, 0.0615);
+    priv_nh.param<double>("dx", dx, 0.075);
+    priv_nh.param<double>("dy", dy, 0.075);
     priv_nh.param<int>("checkerboard_rows", checkerboard_rows, 9);
     priv_nh.param<int>("checkerboard_cols", checkerboard_cols, 6);
 
     priv_nh.param<int>("min_points_on_plane", min_points_on_plane, 450);
-    priv_nh.param<int>("num_views", num_views, 8);
+    priv_nh.param<int>("num_views", num_views, 10);
     priv_nh.param<std::string>("initializations_file", initializations_file, std::string("/home/catkin_ws/src/cam_lidar_calib/debug_data/init.txt"));
 
     priv_nh.param<int>("no_of_initializations", no_of_initializations, 1);
@@ -176,7 +205,7 @@ void camLidarCalib::getParamFunc(ros::NodeHandle &priv_nh) {
 
     priv_nh.param<std::string>("result_file", result_str, std::string("/home/catkin_ws/src/cam_lidar_calib/debug_data/CTL.txt"));
     priv_nh.param<std::string>("result_rpy_file", result_rpy, std::string("/home/catkin_ws/src/cam_lidar_calib/debug_data/rpy.txt"));
-    priv_nh.param<std::string>("cam_config_file_path", cam_config_file_path, std::string("/home/catkin_ws/src/cam_lidar_calib/config/basler.yaml"));
+    priv_nh.param<std::string>("cam_config_file_path", cam_config_file_path, std::string("/home/catkin_ws/src/cam_lidar_calib/config/basler_config.yaml"));
 
     priv_nh.param<double>("x_min", x_min, 0);
     priv_nh.param<double>("x_max", x_max, 6);
@@ -190,11 +219,7 @@ void camLidarCalib::getParamFunc(ros::NodeHandle &priv_nh) {
     priv_nh.param<std::string>("lidar_in_topic", lidar_in_topic, std::string("/velodyne_points"));
 }
 
-void camLidarCalib::readCameraParams(std::string cam_config_file_path,
-                                     int &image_height,
-                                     int &image_width,
-                                     cv::Mat &D,
-                                     cv::Mat &K) {
+void camLidarCalib::readCameraParams(std::string cam_config_file_path, int &image_height, int &image_width, cv::Mat &D, cv::Mat &K) {
     cv::FileStorage fs_cam_config(cam_config_file_path, cv::FileStorage::READ);
     if (!fs_cam_config.isOpened())
         std::cerr << "Error: Wrong path: " << cam_config_file_path << std::endl;
@@ -211,54 +236,7 @@ void camLidarCalib::readCameraParams(std::string cam_config_file_path,
     fs_cam_config["cy"] >> K.at<double>(1, 2);
 }
 
-void camLidarCalib::addGaussianNoise(Eigen::Matrix4d &transformation) {
-    std::vector<double> data_rot = {0, 0, 0};
-    const double mean_rot = 0.0;
-    std::default_random_engine generator_rot;
-    generator_rot.seed(std::chrono::system_clock::now().time_since_epoch().count());
-    std::normal_distribution<double> dist(mean_rot, 90);
-
-    // Add Gaussian noise
-    for (auto &x : data_rot) {
-        x = x + dist(generator_rot);
-    }
-
-    double roll = data_rot[0] * M_PI / 180;
-    double pitch = data_rot[1] * M_PI / 180;
-    double yaw = data_rot[2] * M_PI / 180;
-
-    Eigen::Matrix3d m;
-    m = Eigen::AngleAxisd(roll, Eigen::Vector3d::UnitX()) * Eigen::AngleAxisd(pitch, Eigen::Vector3d::UnitY()) * Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ());
-
-    std::vector<double> data_trans = {0, 0, 0};
-    const double mean_trans = 0.0;
-    std::default_random_engine generator_trans;
-    generator_trans.seed(std::chrono::system_clock::now().time_since_epoch().count());
-    std::normal_distribution<double> dist_trans(mean_trans, 0.5);
-
-    // Add Gaussian noise
-    for (auto &x : data_trans) {
-        x = x + dist_trans(generator_trans);
-    }
-
-    Eigen::Vector3d trans;
-    trans(0) = data_trans[0];
-    trans(1) = data_trans[1];
-    trans(2) = data_trans[2];
-
-    Eigen::Matrix4d trans_noise = Eigen::Matrix4d::Identity();
-    trans_noise.block(0, 0, 3, 3) = m;
-    trans_noise.block(0, 3, 3, 1) = trans;
-    transformation = transformation * trans_noise;
-}
-
 void camLidarCalib::cloudHandler(const sensor_msgs::PointCloud2ConstPtr &cloud_msg) {
-    // open3d::geometry::PointCloud pcd;
-    auto pcd = std::make_shared<open3d::geometry::PointCloud>();
-
-    open3d_ros::rosToOpen3d(cloud_msg, *pcd);
-    pcd->SegmentPlane();
-
     pcl::PointCloud<pcl::PointXYZ>::Ptr in_cloud(new pcl::PointCloud<pcl::PointXYZ>);
     // ros pointclout type -> pcl type
     pcl::fromROSMsg(*cloud_msg, *in_cloud);
@@ -289,8 +267,7 @@ void camLidarCalib::cloudHandler(const sensor_msgs::PointCloud2ConstPtr &cloud_m
     pass_z.filter(*cloud_filtered_z);
 
     /// Plane Segmentation
-    pcl::SampleConsensusModelPlane<pcl::PointXYZ>::Ptr model_p(
-        new pcl::SampleConsensusModelPlane<pcl::PointXYZ>(cloud_filtered_z));
+    pcl::SampleConsensusModelPlane<pcl::PointXYZ>::Ptr model_p(new pcl::SampleConsensusModelPlane<pcl::PointXYZ>(cloud_filtered_z));
     pcl::RandomSampleConsensus<pcl::PointXYZ> ransac(model_p);
     ransac.setDistanceThreshold(ransac_threshold);
     ransac.computeModel();
@@ -314,7 +291,7 @@ void camLidarCalib::cloudHandler(const sensor_msgs::PointCloud2ConstPtr &cloud_m
         lidar_points.push_back(Eigen::Vector3d(X, Y, Z));
     }
     ROS_INFO_STREAM("No of planar_pts: " << lidar_points.size());
-    ROS_WARN_STREAM("No of planar_pts: " << plane_filtered->points.size());
+    // ROS_WARN_STREAM("No of planar_pts: " << plane_filtered->points.size());
     sensor_msgs::PointCloud2 out_cloud;
     pcl::toROSMsg(*plane_filtered, out_cloud);
     out_cloud.header.frame_id = cloud_msg->header.frame_id;
@@ -326,15 +303,8 @@ void camLidarCalib::imageHandler(const sensor_msgs::ImageConstPtr &image_msg) {
     try {
         // ros type -> cv type
         image_in = cv_bridge::toCvShare(image_msg, "bgr8")->image;
-        boardDetectedInCam = cv::findChessboardCorners(image_in,
-                                                       cv::Size(checkerboard_cols, checkerboard_rows),
-                                                       image_points,
-                                                       cv::CALIB_CB_ADAPTIVE_THRESH +
-                                                           cv::CALIB_CB_NORMALIZE_IMAGE);
-        cv::drawChessboardCorners(image_in,
-                                  cv::Size(checkerboard_cols, checkerboard_rows),
-                                  image_points,
-                                  boardDetectedInCam);
+        boardDetectedInCam = cv::findChessboardCorners(image_in, cv::Size(checkerboard_cols, checkerboard_rows), image_points, cv::CALIB_CB_ADAPTIVE_THRESH + cv::CALIB_CB_NORMALIZE_IMAGE);
+        cv::drawChessboardCorners(image_in, cv::Size(checkerboard_cols, checkerboard_rows), image_points, boardDetectedInCam);
         // std::cout << image_points.size() << "==" << object_points.size() << std::endl;
         if (image_points.size() == object_points.size()) {
             cv::solvePnP(object_points, image_points, projection_matrix, distCoeff, rvec, tvec, false, CV_ITERATIVE);
@@ -346,10 +316,7 @@ void camLidarCalib::imageHandler(const sensor_msgs::ImageConstPtr &image_msg) {
             }
             cv::Rodrigues(rvec, C_R_W);
             cv::cv2eigen(C_R_W, c_R_w);
-            c_t_w = Eigen::Vector3d(tvec.at<double>(0),
-                                    tvec.at<double>(1),
-                                    tvec.at<double>(2));
-
+            c_t_w = Eigen::Vector3d(tvec.at<double>(0), tvec.at<double>(1), tvec.at<double>(2));
             r3 = c_R_w.block<3, 1>(0, 2);
             Nc = (r3.dot(c_t_w)) * r3;
         }
@@ -357,8 +324,7 @@ void camLidarCalib::imageHandler(const sensor_msgs::ImageConstPtr &image_msg) {
         cv::imshow("view", image_resized);
         cv::waitKey(10);
     } catch (cv_bridge::Exception &e) {
-        ROS_ERROR("Could not convert from '%s' to 'bgr8'.",
-                  image_msg->encoding.c_str());
+        ROS_ERROR("Could not convert from '%s' to 'bgr8'.", image_msg->encoding.c_str());
     }
 }
 
@@ -378,12 +344,6 @@ void camLidarCalib::runSolver() {
 
                     /// Step 1: Initialization
                     Eigen::Matrix4d transformation_matrix = Eigen::Matrix4d::Identity();
-                    // addGaussianNoise(transformation_matrix);
-                    // transformation_matrix << 5.96046e-08, -0.999391, 0.0348994, -1.0,
-                    //     0, -0.0348994, -0.999391, -1.0,
-                    //     1, 0, 5.96046e-08, -1.0,
-                    //     0.0, 0.0, 0.0, 1.0;
-
                     Eigen::Matrix3d Rotn = transformation_matrix.block(0, 0, 3, 3);
                     Eigen::Vector3d axis_angle;
                     ceres::RotationMatrixToAngleAxis(Rotn.data(), axis_angle.data());
@@ -449,9 +409,7 @@ void camLidarCalib::runSolver() {
                     covariance_blocks.push_back(std::make_pair(R_t.data(), R_t.data()));
                     CHECK(covariance.Compute(covariance_blocks, &problem));
                     double covariance_xx[6 * 6];
-                    covariance.GetCovarianceBlock(R_t.data(),
-                                                  R_t.data(),
-                                                  covariance_xx);
+                    covariance.GetCovarianceBlock(R_t.data(), R_t.data(), covariance_xx);
 
                     Eigen::MatrixXd cov_mat_RotTrans(6, 6);
                     cv::Mat cov_mat_cv = cv::Mat(6, 6, CV_64F, &covariance_xx);
