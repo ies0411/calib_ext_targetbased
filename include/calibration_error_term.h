@@ -19,8 +19,7 @@ class CalibrationErrorTerm {
                          const Eigen::Vector3d& normal_to_plane) : laser_point_(laser_point), normal_to_plane_(normal_to_plane) {}
 
     template <typename T>
-    bool operator()(const T* const R_t,
-                    T* residual) const {
+    bool operator()(const T* const R_t, T* residual) const {
         T l_pt_L[3] = {T(laser_point_(0)), T(laser_point_(1)), T(laser_point_(2))};
         T n_C[3] = {T(normal_to_plane_(0)), T(normal_to_plane_(1)), T(normal_to_plane_(2))};
         T l_pt_C[3];
