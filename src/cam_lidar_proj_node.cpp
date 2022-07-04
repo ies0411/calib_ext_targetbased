@@ -1,6 +1,4 @@
-//
-// Created by usl on 4/10/19.
-//
+
 
 #include <cv_bridge/cv_bridge.h>
 #include <image_transport/image_transport.h>
@@ -43,6 +41,7 @@
 
 typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::PointCloud2, sensor_msgs::Image> SyncPolicy;
 
+// TODO : pcl -> open3D
 class lidarImageProjection {
    private:
     ros::NodeHandle nh;
@@ -98,11 +97,7 @@ class lidarImageProjection {
 
     lidarImageProjection(ros::NodeHandle &priv_nh) {
         getParam(priv_nh);
-        // camera_in_topic = readParam<std::string>(priv_nh, "camera_in_topic");
-        // std::cout << camera_in_topic << std::endl;
-        // lidar_in_topic = readParam<std::string>(priv_nh, "lidar_in_topic");
-        // dist_cut_off = readParam<int>(priv_nh, "dist_cut_off");
-        // camera_name = readParam<std::string>(priv_nh, "camera_name");
+
         cloud_sub = new message_filters::Subscriber<sensor_msgs::PointCloud2>(nh, lidar_in_topic, 1);
         image_sub = new message_filters::Subscriber<sensor_msgs::Image>(nh, camera_in_topic, 1);
         std::string lidarOutTopic = camera_in_topic + "/velodyne_out_cloud";
@@ -236,7 +231,7 @@ class lidarImageProjection {
 
         int x = xy_f.x;
         int y = xy_f.y;
-
+        // TODO: row 범위 커지면 점의 크기도 커질듯 ? 확인필요
         for (int row = 0; row <= 1; row++) {
             for (int col = 0; col <= 1; col++) {
                 if ((x + col) < rgb.cols && (y + row) < rgb.rows) {
@@ -279,8 +274,7 @@ class lidarImageProjection {
         }
     }
 
-    void colorLidarPointsOnImage(double min_range,
-                                 double max_range) {
+    void colorLidarPointsOnImage(double min_range, double max_range) {
         for (size_t i = 0; i < imagePoints.size(); i++) {
             double X = objectPoints_C[i].x;
             double Y = objectPoints_C[i].y;
@@ -288,8 +282,7 @@ class lidarImageProjection {
             double range = sqrt(X * X + Y * Y + Z * Z);
             double red_field = 255 * (range - min_range) / (max_range - min_range);
             double green_field = 255 * (max_range - range) / (max_range - min_range);
-            cv::circle(image_in, imagePoints[i], 2,
-                       CV_RGB(red_field, green_field, 0), -1, 1, 0);
+            cv::circle(image_in, imagePoints[i], 2, CV_RGB(red_field, green_field, 0), -1, 1, 0);
         }
     }
 
@@ -316,6 +309,7 @@ class lidarImageProjection {
             }
             cv::projectPoints(objectPoints_L, rvec, tvec, projection_matrix, distCoeff, imagePoints, cv::noArray());
         } else {
+            // TODO 분석
             pcl::PCLPointCloud2 *cloud_in = new pcl::PCLPointCloud2;
             pcl_conversions::toPCL(*cloud_msg, *cloud_in);
             pcl::fromPCLPointCloud2(*cloud_in, *in_cloud);
@@ -364,7 +358,7 @@ class lidarImageProjection {
         }
 
         /// Color the Point Cloud
-        // ROS_INFO("55");
+
         colorPointCloud();
         pcl::toROSMsg(out_cloud_pcl, out_cloud_ros);
         out_cloud_ros.header.frame_id = cloud_msg->header.frame_id;
@@ -377,10 +371,10 @@ class lidarImageProjection {
 
         sensor_msgs::ImagePtr msg = cv_bridge::CvImage(std_msgs::Header(), "bgr8", image_in).toImageMsg();
         image_pub.publish(msg);
-        //        cv::Mat image_resized;
-        //        cv::resize(lidarPtsImg, image_resized, cv::Size(), 0.25, 0.25);
-        //        cv::imshow("view", image_resized);
-        //        cv::waitKey(10);
+        cv::Mat image_resized;
+        cv::resize(image_in, image_resized, cv::Size(), 0.25, 0.25);
+        cv::imshow("view", image_resized);
+        cv::waitKey(10);
     }
 };
 
