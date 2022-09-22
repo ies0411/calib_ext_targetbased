@@ -1,0 +1,22 @@
+<launch>
+  <node  pkg="cam_lidar_calib" name="custom_calib" type="custom_calib" output="screen">
+
+  	<param name = "result_file" type="string" value="$(find cam_lidar_calib)/result/C_T_L_basler.txt"/>
+  	<param name = "json_result_file" type="string" value="$(find cam_lidar_calib)/result/result_json.json"/>
+		<param name = "load_pcd_path" type="string" value="/workspace/data/pcd/"/>
+		<param name = "file_type" type="string" value="rosbag"/>
+
+  	<param name = "min_points_on_plane" type="int" value="150"/>
+  	<param name = "lidar_in_topic" type="string" value="/velodyne_points"/>
+
+		<param name="x_min" value="0"/>
+		<param name="x_max" value="6"/>
+		<param name="y_min" value="-1.25"/>
+		<param name="y_max" value="1.25"/>
+		<param name="z_min" value="-0.5"/>
+		<param name="z_max" value="2"/>
+		<param name="ransac_threshold" value="0.01"/>
+
+  	<param name = "cam_config_file_path" type="string" value="$(find cam_lidar_calib)/config/intrinsic.yaml" />
+  </node>
+</launch>

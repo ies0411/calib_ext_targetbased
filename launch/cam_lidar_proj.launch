@@ -1,0 +1,23 @@
+<launch>
+  <node  pkg="cam_lidar_calib" name="cam_lidar_proj_basler" type="cam_lidar_proj_node" output="screen">
+
+  <param name = "result_file" type="string" value="$(find cam_lidar_calib)/result/C_T_L.txt"/>
+
+  <param name= "project_only_plane" type="bool" value="false"/>
+
+  <param name = "camera_in_topic" type="string" value="/pylon_camera_node/image_raw"/>
+  <param name = "lidar_in_topic" type="string" value="/velodyne_points"/>
+  <param name = "camera_name" type="string" value="basler"/>
+
+  <param name = "dist_cut_off" type="int" value="5"/>
+  <param name = "file_type" type="string" value="file"/>
+  <param name = "num_data" type="int" value="9"/>
+  <param name = "img_path" type="string" value="/workspace/data/ratectn/img/"/>
+  <param name = "pcd_path" type="string" value="/workspace/data/ratectn/pcd/"/>
+  <!-- <param name = "file" type="string" value="rosbag"/> -->
+
+
+  <param name = "cam_config_file_path" type="string" value="$(find cam_lidar_calib)/config/intrinsic.yaml" />
+
+  </node>
+</launch>

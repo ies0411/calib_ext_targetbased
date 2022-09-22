@@ -1,0 +1,40 @@
+<launch>
+  <node  pkg="cam_lidar_calib" name="cam_lidar_calib" type="cam_lidar_calib" output="screen">
+  	<param name = "dx" type="double" value="0.097"/>
+  	<param name = "dy" type="double" value="0.097"/>
+
+  	<param name = "checkerboard_rows" type = "int" value = "8" />
+  	<param name = "checkerboard_cols" type = "int" value = "5" />
+
+  	<param name = "result_file" type="string" value="$(find cam_lidar_calib)/result/CTL.txt"/>
+  	<!-- <param name = "result_rpy_file" type="string" value="$(find cam_lidar_calib)/debug_data/rpy.txt"/> -->
+  	<param name = "json_result_file" type="string" value="$(find cam_lidar_calib)/result/result_json.json"/>
+		<param name = "load_img_path" type="string" value="/workspace/data/sort_atech/img/"/>
+		<param name = "load_pcd_path" type="string" value="/workspace/data/sort_atech/pcd/"/>
+		<param name = "file_type" type="string" value="file"/>
+    <param name = "num_data" type="int" value="35"/>
+		<!-- <param name = "num_data" type="int" value="10"/> -->
+
+  	<param name = "min_points_on_plane" type="int" value="860"/>
+  	<param name = "num_views" type="int" value="50"/>
+		<param name = "img_type" type="string" value="png"/>
+
+
+  	<param name = "camera_in_topic" type="string" value="/pylon_camera_node/image_raw"/>
+  	<param name = "lidar_in_topic" type="string" value="/velodyne_points"/>
+		<param name = "publish_rate" type="double" value="1"/>
+		<param name = "show_debug" type="bool" value="false"/>
+		<param name = "filtering" type="bool" value="false"/>
+  	<param name = "plane_library" type="string" value="open3d"/>
+
+		<param name="x_min" value="-2.3"/>
+		<param name="x_max" value="2.3"/>
+		<param name="y_min" value="-3.0"/>
+		<param name="y_max" value="0.55"/>
+		<param name="z_min" value="-0.5"/>
+		<param name="z_max" value="1.5"/>
+		<param name="ransac_threshold" value="10"/>
+
+  	<param name = "cam_config_file_path" type="string" value="$(find cam_lidar_calib)/config/intrinsic.yaml" />
+  </node>
+</launch>
